@@ -6,9 +6,9 @@ Uses vagrant's ansible provisioner to provision a VM with Jenkins to build light
 
 ### Prequsites
 
-Vagrant Install
-Virtual Installed
-Ansible Installed
+- Vagrant Installed
+- Virtual Installed
+- Ansible Installed
 
 ### VM Specifics
 - Operating System: Centos 7
