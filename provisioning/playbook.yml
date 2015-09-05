@@ -1,0 +1,79 @@
+---
+- hosts: jenkins
+  gather_facts: yes
+
+  vars_files:
+    - vars/main.yml
+
+  tasks:
+
+    - name: Ensure Jenkins Dependencies are installed.
+      yum: pkg=java-1.7.0-openjdk state=installed
+
+    - name: Ensure Playbook Dependencies are installed.
+      yum: pkg=curl state=installed
+
+    - name: Load Jenkins Repo.
+      get_url:
+        url: http://pkg.jenkins-ci.org/redhat/jenkins.repo
+        dest: /etc/yum.repos.d/jenkins.repo
+
+    - name: Add Jenkins repo GPG key.
+      rpm_key:
+        state: present
+        key: http://pkg.jenkins-ci.org/redhat/jenkins-ci.org.key
+
+    - name: Install Jenkins.
+      yum: pkg=jenkins state=installed
+
+    - name: restart jenkins
+      service: name=jenkins state=restarted
+
+    - name: Get the jenkins-cli jarfile from the Jenkins server.
+      get_url:
+        url: "http://{{ jenkins_hostname }}:8080/jnlpJars/jenkins-cli.jar"
+        dest: "{{ jenkins_jar_location }}"
+      register: jarfile_get
+      until: "'OK' in jarfile_get.msg or 'file already exists' in jarfile_get.msg"
+      retries: 5
+      delay: 10
+
+    - name: Create Jenkins updates folder.
+      file:
+        path: /var/lib/jenkins/updates
+        owner: jenkins
+        group: jenkins
+        mode: 0755
+        state: directory
+
+    - name: Update Jenkins plugin data.
+      shell: >
+        curl -L https://updates.jenkins-ci.org/update-center.json | sed '1d;$d' > /var/lib/jenkins/updates/default.json
+        creates=/var/lib/jenkins/updates/default.json
+
+    - name: Permissions for default.json updates info.
+      file:
+        path: /var/lib/jenkins/updates/default.json
+        owner: jenkins
+        group: jenkins
+        mode: 0755
+
+    - name: restart jenkins
+      service: name=jenkins state=restarted
+
+    - name: Copying Jenkin Job File from playbook
+      copy: src=./files/lighttpd.xml dest=/opt/lighttpd.xml
+            owner=root group=root mode=0644
+
+    - name: Ensure lighttpd dependencies are installed.
+      yum: pkg={{ item }}
+      with_items: "{{  lighttpd_dependencies  }}"
+
+    - name: Importing Jenkins Job file
+      shell: >
+        java -jar {{ jenkins_jar_location }} -s http://{{ jenkins_hostname }}:{{ jenkins_port }} create-job lighttpd < /opt/lighttpd.xml
+      retries: 5
+      delay: 10
+    - name: Running Jenkins Job lighttpd
+      shell: >
+        java -jar {{ jenkins_jar_location }} -s http://{{ jenkins_hostname }}:{{ jenkins_port }} build lighttpd
